@@ -1,0 +1,80 @@
+{% extends "core/base.html" %}
+
+{% block principal %}
+<div class="container">
+    <h1>Carrito de Compras</h1>
+
+    {% if items_carrito %}
+    <table>
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th>Cantidad</th>
+                <th>Precio</th>
+                <th>Subtotal</th>
+                <th>Eliminar</th>
+                
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items_carrito %}
+            <tr>
+                <td>{{ item.producto.nombre }}</td>
+                <td>{{ item.producto.descripcion }}</td>
+                <td>
+                  <a href="{% url 'DISMINUIR_CANTIDAD' item.id %}">DISMINUIR</a>
+                  {{ item.cantidad }}
+                  <a href="{% url 'AUMENTAR_CANTIDAD' item.id %}">AUMENTAR</a>
+                </td>
+                <td>${{ item.producto.precio }}</td>
+                <td>${{ item.total_item }}</td>
+                <td><a href="{% url 'ELIMINAR_DEL_CARRITO' item.id %}" class="btn btn-danger">Eliminar</a></td>
+            </tr>
+            {% endfor %}
+            <tr>
+                <td colspan="4"><strong>Total</strong></td>
+                <td>${{ total_formato }}</td>
+            </tr>
+        </tbody>
+    </table>
+    <a href="{% url 'VACIAR_CARRITO' %}" class="btn btn-danger">VACIAR CARRITO</a>
+    {% else %}
+    <p>No hay productos en el carrito.</p>
+    {% endif %}
+</div>
+
+<style>
+    .container {
+        margin: 20px auto;
+        width: 80%;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th, td {
+        padding: 8px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+
+    th {
+        background-color: #f2f2f2;
+    }
+
+    td {
+        vertical-align: middle;
+    }
+
+    tbody tr:hover {
+        background-color: #f5f5f5;
+    }
+
+    tfoot {
+        font-weight: bold;
+    }
+</style>
+{% endblock principal %}
