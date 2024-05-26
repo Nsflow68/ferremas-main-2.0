@@ -14,7 +14,6 @@
                 <th>Precio</th>
                 <th>Subtotal</th>
                 <th>Eliminar</th>
-                
             </tr>
         </thead>
         <tbody>
@@ -39,11 +38,13 @@
         </tbody>
     </table>
     <a href="{% url 'VACIAR_CARRITO' %}" class="btn btn-danger">VACIAR CARRITO</a>
+    <a href="{% url 'generar_boleta' %}" class="btn btn-success">PAGAR CON WEBPAY</a>
     {% else %}
     <p>No hay productos en el carrito.</p>
     {% endif %}
 </div>
 
+{% endblock %}
 <style>
     .container {
         margin: 20px auto;

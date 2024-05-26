@@ -7,6 +7,7 @@ urlpatterns = [
     path('registro/', registro, name="registro"),
     path('tienda/', tienda, name="tienda"),
     path('cerrar_sesion/', cerrar_sesion, name="CERRAR_SESSION"),
+    path('perfil/', perfil, name='perfil'),
 
 
     # Carrito
@@ -24,7 +25,17 @@ urlpatterns = [
 
     path('indicadores/', indicadores_view, name='indicadores'),
 
+    path('buscar/', buscar_productos, name='buscar_productos'),
 
+    #TRANSbank
 
-
+    path('create/', webpay_plus_create, name='webpay_plus_create'),
+    path('commit/', webpay_plus_commit, name='webpay_plus_commit'),
+    path('commit-error/', webpay_plus_commit_error, name='webpay_plus_commit_error'),
+    path('refund/', webpay_plus_refund, name='webpay_plus_refund'),
+    path('refund-form/', webpay_plus_refund_form, name='webpay_plus_refund_form'),
+    path('status-form/', show_create, name='webpay_plus_status_form'),
+    path('status/', status, name='webpay_plus_status'),
+    path('generar_boleta/', generar_boleta, name='generar_boleta'),
+    
 ]

@@ -31,6 +31,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -77,9 +78,13 @@ WSGI_APPLICATION = "ProyectoFerremas.wsgi.application"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'ferremas_bd',
+        'USER': 'admin',
+        'PASSWORD': 'asdasd123123',
+        'HOST': 'localhost',
+        'PORT': '3306',
     }
 }
 
@@ -128,3 +133,8 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# WEBPAY PLUS
+WEBPAY_PLUS_COMMERCE_CODE = '597055555532'  # Código de comercio de prueba
+WEBPAY_PLUS_API_KEY = 'b89576d6b4c1e2f1f1d3dbd23a75c3af'  # Clave API de prueba
+WEBPAY_PLUS_ENVIRONMENT = 'TEST' #TESTS

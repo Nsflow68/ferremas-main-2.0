@@ -2,26 +2,51 @@ from django.shortcuts import render, redirect, get_object_or_404
 from .models import Producto, Carrito, CarritoItem
 import locale
 import requests
-from django.shortcuts import render
-
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login as login_aut
+from .form import LoginForm, RegistroForm
+from .form import LoginForm, RegistroForm
+from django.db.models import Q
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout,authenticate,login as login_aut
+import random
+from transbank.webpay.webpay_plus.transaction import Transaction
+from transbank.error.transbank_error import TransbankError
+from django.http import HttpResponseBadRequest
+from django.http import HttpResponse
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import logout, authenticate, login as login_aut
+from django.contrib.auth.models import User
+from .models import Producto, Carrito, CarritoItem, Boleta, DetalleBoleta
+from django.contrib.auth.decorators import login_required
+import locale
+import random
+from transbank.webpay.webpay_plus.transaction import Transaction
+from transbank.error.transbank_error import TransbankError
+from django.http import HttpResponseBadRequest
+
+
+
 
 # Create your views here.
-def index (request):
-    
-    return render(request,'core/index.html')
+def index(request):
+    return render(request, 'core/index.html', {'user': request.user})
 
-def login (request):
-    if request.method == "POST":
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-
-        user = authenticate(request, username = username, password = password)
-
-        if user is not None and user.is_active:
-            login_aut(request, user)
-            return redirect(to='index')
-    return render(request,'core/login.html')
+def login(request):
+    if request.method == 'POST':
+        form = LoginForm(request.POST)
+        if form.is_valid():
+            username = form.cleaned_data['username']
+            password = form.cleaned_data['password']
+            user = authenticate(request, username=username, password=password)
+            if user is not None and user.is_active:
+                login_aut(request, user)
+                return redirect('index')
+            else:
+                form.add_error(None, 'Nombre de usuario o contraseña incorrectos')
+    else:
+        form = LoginForm()
+    return render(request, 'core/login.html', {'form': form})
 
 def cerrar_sesion(request):
     logout(request)
@@ -128,3 +153,138 @@ def indicadores_view(request):
 
     return render(request, 'core/indicadores.html', {'indicadores': indicadores})
 
+
+def registro(request):
+    if request.method == 'POST':
+        form = RegistroForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login_aut(request, user)
+            return redirect('index')
+    else:
+        form = RegistroForm()
+    return render(request, 'core/registro.html', {'form': form})
+
+
+#BUSCAR
+
+def buscar_productos(request):
+    query = request.GET.get('q', '')
+    productos = Producto.objects.all()
+
+    if query:
+        productos = productos.filter(
+            Q(nombre__icontains=query) |
+            Q(categoria__categoria__icontains=query) |
+            Q(descripcion__icontains=query)
+        )
+
+    ctx = {
+        'productos': productos,
+        'query': query
+    }
+    return render(request, 'core/tienda.html', ctx)
+
+#PERFIL
+
+@login_required
+def perfil(request):
+    return render(request, 'core/perfil.html', {'user': request.user})
+
+#TRANSBANK
+
+
+# Agregar vistas para la integración de pagos con Transbank
+def webpay_plus_commit(request):
+    if request.method == 'GET':
+        token = request.GET.get("token_ws")
+        if token is None:
+            return HttpResponseBadRequest("El parámetro 'token_ws' es requerido en la URL.")
+
+        response = Transaction().commit(token=token)
+        productos = []
+        precio_total = 0
+        if response['status'] == 'AUTHORIZED':
+            carrito = Carrito.objects.get(usuario=request.user)
+            items_carrito = carrito.carritoitem_set.all()
+            precio_total = sum(item.cantidad * item.producto.precio for item in items_carrito)
+
+            boleta = Boleta(total=precio_total)
+            boleta.save()
+
+            for item in items_carrito:
+                producto = item.producto
+                cantidad = item.cantidad
+                subtotal = cantidad * producto.precio
+                detalle = DetalleBoleta(boleta=boleta, producto=producto, cantidad=cantidad, subtotal=subtotal)
+                detalle.save()
+                productos.append({
+                    'nombre': producto.nombre,
+                    'cantidad': cantidad,
+                    'subtotal': subtotal
+                })
+
+            carrito.carritoitem_set.all().delete()
+
+        context = {'token': token, 'response': response, 'productos': productos, 'total': precio_total}
+        return render(request, 'core/commit.html', context)
+    elif request.method == 'POST':
+        token = request.POST.get("token_ws")
+        response = {"error": "Transacción con errores"}
+        return render(request, 'core/commit.html', {'token': token, 'response': response})
+
+def generar_boleta(request):
+    if request.method == 'GET':
+        carrito = Carrito.objects.get_or_create(usuario=request.user)[0]
+        items_carrito = carrito.carritoitem_set.all()
+        if not items_carrito:
+            return render(request, 'core/error.html', {'error': 'El carrito está vacío'})
+
+        precio_total = sum(item.cantidad * item.producto.precio for item in items_carrito)
+        buy_order = str(random.randrange(1000000, 99999999))
+        session_id = str(random.randrange(1000000, 99999999))
+        return_url = request.build_absolute_uri('/core/commit')
+
+        try:
+            response = Transaction().create(buy_order, session_id, precio_total, return_url)
+            return render(request, 'core/create.html', {'response': response})
+        except Exception as e:
+            return render(request, 'core/error.html', {'error': str(e)})
+    else:
+        return render(request, 'core/error.html', {'error': 'Método HTTP no permitido'})
+
+def webpay_plus_commit_error(request):
+    return HttpResponse("Error en la transacción de pago")
+
+def webpay_plus_refund(request):
+    if request.method == 'POST':
+        token = request.POST.get("token_ws")
+        amount = request.POST.get("amount")
+
+        try:
+            response = Transaction().refund(token, amount)
+            return render(request, "core/refund.html", {'token': token, 'amount': amount, 'response': response})
+        except TransbankError as e:
+            return render(request, 'core/error.html', {'error': str(e)})
+
+def webpay_plus_refund_form(request):
+    return render(request, 'core/refund-form.html')
+
+def status(request):
+    token_ws = request.POST.get('token_ws')
+    tx = Transaction()
+    resp = tx.status(token_ws)
+    return render(request, 'core/status.html', {'response': resp, 'token': token_ws, 'req': request.POST})
+
+def show_create(request):
+    return render(request, 'core/status-form.html')
+
+def webpay_plus_create(request):
+    if request.method == 'GET':
+        buy_order = str(random.randrange(1000000, 99999999))
+        session_id = str(random.randrange(1000000, 99999999))
+        amount = random.randrange(10000, 1000000)
+        return_url = request.build_absolute_uri('/core/commit')
+
+        response = Transaction().create(buy_order, session_id, amount, return_url)
+        return render(request, 'core/create.html', {'response': response})

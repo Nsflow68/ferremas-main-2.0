@@ -32,6 +32,7 @@ class CategoriaProducto(models.Model):
         return self.categoria
     
 class Producto(models.Model):
+    id = models.AutoField(primary_key=True, auto_created=True)
     nombre = models.CharField(max_length=64, null = False)
     categoria = models.ForeignKey(CategoriaProducto, on_delete = models.CASCADE)
     descripcion = models.TextField()
@@ -85,5 +86,15 @@ class CarritoItem(models.Model):
 
     def precio_total(self):
         return self.cantidad * self.precio
+    
 
+class Boleta(models.Model):
+    total = models.PositiveIntegerField()
+    fecha = models.DateTimeField(auto_now_add=True)
+
+class DetalleBoleta(models.Model):
+    boleta = models.ForeignKey(Boleta, on_delete=models.CASCADE)
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE)
+    cantidad = models.PositiveIntegerField()
+    subtotal = models.PositiveIntegerField()
 
