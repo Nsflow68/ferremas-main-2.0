@@ -32,7 +32,7 @@ class CategoriaProducto(models.Model):
         return self.categoria
     
 class Producto(models.Model):
-    id = models.AutoField(primary_key=True, auto_created=True)
+    
     nombre = models.CharField(max_length=64, null = False)
     categoria = models.ForeignKey(CategoriaProducto, on_delete = models.CASCADE)
     descripcion = models.TextField()

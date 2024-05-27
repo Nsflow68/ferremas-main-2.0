@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from .models import Producto, Carrito, CarritoItem
 import locale
 import requests
@@ -14,16 +15,12 @@ from transbank.webpay.webpay_plus.transaction import Transaction
 from transbank.error.transbank_error import TransbankError
 from django.http import HttpResponseBadRequest
 from django.http import HttpResponse
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import logout, authenticate, login as login_aut
+from .models import Boleta, DetalleBoleta
 from django.contrib.auth.models import User
-from .models import Producto, Carrito, CarritoItem, Boleta, DetalleBoleta
-from django.contrib.auth.decorators import login_required
-import locale
-import random
-from transbank.webpay.webpay_plus.transaction import Transaction
-from transbank.error.transbank_error import TransbankError
-from django.http import HttpResponseBadRequest
+import logging
+from django.contrib import messages
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -31,6 +28,7 @@ from django.http import HttpResponseBadRequest
 # Create your views here.
 def index(request):
     return render(request, 'core/index.html', {'user': request.user})
+
 
 def login(request):
     if request.method == 'POST':
@@ -43,10 +41,14 @@ def login(request):
                 login_aut(request, user)
                 return redirect('index')
             else:
-                form.add_error(None, 'Nombre de usuario o contraseña incorrectos')
+                if User.objects.filter(username=username).exists():
+                    form.add_error(None, 'Contraseña incorrecta')
+                else:
+                    form.add_error(None, 'Nombre de usuario incorrecto')
     else:
         form = LoginForm()
     return render(request, 'core/login.html', {'form': form})
+
 
 def cerrar_sesion(request):
     logout(request)
@@ -154,17 +156,25 @@ def indicadores_view(request):
     return render(request, 'core/indicadores.html', {'indicadores': indicadores})
 
 
+
 def registro(request):
     if request.method == 'POST':
         form = RegistroForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            login_aut(request, user)
-            return redirect('index')
+            try:
+                user = form.save()
+                login_aut(request, user)
+                messages.success(request, 'Registro exitoso. Bienvenido!')
+                logger.info(f"Usuario {user.username} registrado y autenticado exitosamente")
+                return redirect('index')
+            except Exception as e:
+                logger.error(f"Error al registrar el usuario: {e}")
+                form.add_error(None, 'Ocurrió un error al crear el usuario. Por favor, inténtelo de nuevo.')
+        else:
+            logger.warning(f"Formulario de registro no válido: {form.errors.as_json()}")
     else:
         form = RegistroForm()
     return render(request, 'core/registro.html', {'form': form})
-
 
 #BUSCAR
 
@@ -197,41 +207,58 @@ def perfil(request):
 # Agregar vistas para la integración de pagos con Transbank
 def webpay_plus_commit(request):
     if request.method == 'GET':
-        token = request.GET.get("token_ws")
+        token = request.GET.get("TBK_TOKEN")
         if token is None:
-            return HttpResponseBadRequest("El parámetro 'token_ws' es requerido en la URL.")
+            return HttpResponseBadRequest("El parámetro 'TBK_TOKEN' es requerido en la URL.")
 
-        response = Transaction().commit(token=token)
-        productos = []
-        precio_total = 0
-        if response['status'] == 'AUTHORIZED':
-            carrito = Carrito.objects.get(usuario=request.user)
-            items_carrito = carrito.carritoitem_set.all()
-            precio_total = sum(item.cantidad * item.producto.precio for item in items_carrito)
+        try:
+            response = Transaction().commit(token=token)
+            status = response.get('status', 'UNKNOWN')
+            if status == 'AUTHORIZED':
+                productos = []
+                precio_total = 0
+                carrito = Carrito.objects.get(usuario=request.user)
+                items_carrito = carrito.carritoitem_set.all()
+                precio_total = sum(item.cantidad * item.producto.precio for item in items_carrito)
 
-            boleta = Boleta(total=precio_total)
-            boleta.save()
+                boleta = Boleta(total=precio_total)
+                boleta.save()
 
-            for item in items_carrito:
-                producto = item.producto
-                cantidad = item.cantidad
-                subtotal = cantidad * producto.precio
-                detalle = DetalleBoleta(boleta=boleta, producto=producto, cantidad=cantidad, subtotal=subtotal)
-                detalle.save()
-                productos.append({
-                    'nombre': producto.nombre,
-                    'cantidad': cantidad,
-                    'subtotal': subtotal
-                })
+                for item in items_carrito:
+                    producto = item.producto
+                    cantidad = item.cantidad
+                    subtotal = cantidad * producto.precio
+                    detalle = DetalleBoleta(boleta=boleta, producto=producto, cantidad=cantidad, subtotal=subtotal)
+                    detalle.save()
+                    productos.append({
+                        'nombre': producto.nombre,
+                        'cantidad': cantidad,
+                        'subtotal': subtotal
+                    })
 
-            carrito.carritoitem_set.all().delete()
+                carrito.carritoitem_set.all().delete()
 
-        context = {'token': token, 'response': response, 'productos': productos, 'total': precio_total}
-        return render(request, 'core/commit.html', context)
+                context = {'token': token, 'response': response, 'productos': productos, 'total': precio_total}
+                return render(request, 'commit.html', context)
+            else:
+                return render(request, 'commit.html', {'token': token, 'response': response, 'error': f"Estado de la transacción: {status}"})
+        
+        except TransbankError as e:
+            if "422" in str(e):  # Verifica si el error contiene el código 422
+                return redirect('carrito')  # Redirecciona al carrito de compras
+            else:
+                return render(request, 'commit.html', {'error': f"Error en la transacción: {str(e)}"})
+
     elif request.method == 'POST':
+        action = request.POST.get("action")
+        if action == 'cancel':
+            carrito = Carrito.objects.get(usuario=request.user)
+            carrito.carritoitem_set.all().delete()
+            return redirect('carrito')
+        
         token = request.POST.get("token_ws")
         response = {"error": "Transacción con errores"}
-        return render(request, 'core/commit.html', {'token': token, 'response': response})
+        return render(request, 'commit.html', {'token': token, 'response': response})
 
 def generar_boleta(request):
     if request.method == 'GET':
@@ -243,7 +270,7 @@ def generar_boleta(request):
         precio_total = sum(item.cantidad * item.producto.precio for item in items_carrito)
         buy_order = str(random.randrange(1000000, 99999999))
         session_id = str(random.randrange(1000000, 99999999))
-        return_url = request.build_absolute_uri('/core/commit')
+        return_url = request.build_absolute_uri(reverse('webpay_plus_commit'))
 
         try:
             response = Transaction().create(buy_order, session_id, precio_total, return_url)
@@ -252,7 +279,7 @@ def generar_boleta(request):
             return render(request, 'core/error.html', {'error': str(e)})
     else:
         return render(request, 'core/error.html', {'error': 'Método HTTP no permitido'})
-
+    
 def webpay_plus_commit_error(request):
     return HttpResponse("Error en la transacción de pago")
 
@@ -284,7 +311,7 @@ def webpay_plus_create(request):
         buy_order = str(random.randrange(1000000, 99999999))
         session_id = str(random.randrange(1000000, 99999999))
         amount = random.randrange(10000, 1000000)
-        return_url = request.build_absolute_uri('/core/commit')
+        return_url = request.build_absolute_uri('core/commit')
 
         response = Transaction().create(buy_order, session_id, amount, return_url)
         return render(request, 'core/create.html', {'response': response})

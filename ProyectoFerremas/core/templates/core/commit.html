@@ -6,17 +6,29 @@
 </head>
 <body>
     <h1>Resultado de Transacción</h1>
-    <p>Status: {{ response.status }}</p>
+    {% if error %}
+        <p>Error: {{ error }}</p>
+    {% else %}
+        {% if success %}
+            <p>Status: {{ response.status }}</p>
+            <p>Total: {{ total }}</p>
+            <h2>Productos:</h2>
+            <ul>
+                {% for producto in productos %}
+                <li>{{ producto.nombre }} CANTIDAD: {{ producto.cantidad }} SUBTOTAL: {{ producto.subtotal }}</li>
+                {% endfor %}
+            </ul>
+            <p>La transacción fue exitosa.</p>
+        {% else %}
+            <p>Estado de la transacción: {{ response.status }}</p>
+        {% endif %}
+    {% endif %}
 
-    <p>Total: {{ total }}</p>
-    <h2>Productos:</h2>
-    <ul>
-        {% for producto in productos %}
-        <li>{{ producto.nombre }} CANTIDAD: {{ producto.cantidad }} SUBTOTAL: {{ producto.subtotal }}</li>
-        {% endfor %}
-    </ul>
-
-    <a href="{% url 'CARRITO' %}">Volver a Carrito</a>
-
+    <form method="POST">
+        {% csrf_token %}
+        <input type="hidden" name="token_ws" value="{{ token }}">
+        <button type="submit" name="action" value="cancel">Volver al Comercio</button>
+        <button type="submit" name="action" value="confirm">Confirmar Pago</button>
+    </form>
 </body>
 </html>
