@@ -32,6 +32,13 @@
             <li class="nav-item me-3">
               <a class="nav-link text-white" href="{% url 'tienda' %}">Productos</a>
             </li>
+            <li class="nav-item me-3">
+              <a class="nav-link text-white" href="{% url 'indicadores' %}">Indicadores</a>
+            </li>
+            <li class="nav-item me-3">
+              <!-- Añade aquí el botón para la API -->
+              <a class="nav-link text-white" href="/api/productos/">API</a>
+            </li>
             {% if user.is_authenticated %}
             <li class="nav-item me-3">
               <a href="{% url 'CERRAR_SESSION' %}" class="btn btn-danger">Cerrar sesión</a>
